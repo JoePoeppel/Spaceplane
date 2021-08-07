@@ -133,16 +133,17 @@ float Ground_Altitude = 0;
 
 
 // *********** USER INPUT VARIABLES *********** //
-int Release_Altitude = 3000;           // (ft)
-int Release_Time = 4.5 * 60;            // Minutes x 60 seconds/min
+int Release_Altitude = 16000;          // (ft)
+int Release_Time = 17 * 60;            // Minutes x 60 seconds/min
 int Engage_Check_Descent = 0;          // Altitude in which device will begin checking for emergency descent (ft)
-float Altitude_Buffer = 200;           // Maximum difference between two valid consecutive altitude readings (ft)
+float Altitude_Buffer = 300;           // Maximum difference between two valid consecutive altitude readings (ft)
 float Previous_Altitude = 800;         // Initialize to takeoff altitude (ft)
 String Altitude_Method = "MS";         // Options: "GPS" or "MS"
-int Emergency_Release_Counter = 20;    // Number of consecutive times current altitude must be less than previous altitude to trigger emergency descent
-int Burn_Time = 16 * 1000;              // Seconds x 1000 milliseconds/sec
+int Emergency_Release_Counter = 30;    // Number of consecutive times current altitude must be less than previous altitude to trigger emergency descent
+int Burn_Time = 6 * 1000;              // Seconds x 1000 milliseconds/sec
 int Release_Failure_Delay = 10 * 1000; // Seconds x 1000 milliseconds/sec. Time to wait to check for release failure
-int Release_Failure_Altitude = 100;    // Mimumum difference in altitude (ft) that will engage release failure mode after given delay time
+int Release_Failure_Altitude = 200;    // Mimumum difference in altitude (ft) that will engage release failure mode after given delay time
+int Failure_Burn_Time_Multiplier = 3;  // Release failure burn time = Burn_Time * Failure_Burn_Time_Multiplier
 
 // SETUP FUNCTION
 void PREFLIGHT();                                
@@ -280,7 +281,6 @@ void OLED_SETUP() {
 }
 
 
-
 void SD_SETUP(){
   pinMode(chipSelect, OUTPUT);
   Serial.print("Setting up SD card... ");
@@ -397,7 +397,6 @@ void RESISTOR_CUTTER_SETUP() {
 }
 
 
-
 void GPS_SETUP() {
   
     Serial.println("Setting up GPS...");
@@ -500,7 +499,7 @@ void HOLD() {
           UPDATE_OLED("Waiting\nto fly...\n\nFixes: " + String(gps.getSats()) + "\nAlt: " + String(int(Ground_Altitude)));
           
           if(CHECK_FLIGHT_ACTIVE() == true) {
-              Serial.println("Flight starting!");
+              Serial.println("Flight starting!\n");
               UPDATE_OLED("Flight\nstarting!");
               UPDATE_BUZZER_STARTING_FLIGHT();
               BLINK_LEDS(3);
@@ -639,7 +638,8 @@ void CHECK_UNEXPECTED_DESCENT() {
         Release_Mode = "UNEXPECTED DESCENT";
         Emergency_Release = true;
         Not_Released = false;
-         
+
+        Burn_Time = Failure_Burn_Time_Multiplier * Burn_Time;
         RESISTOR_CUTTER_RELEASE();
         delay(100);
         SERVO_RELEASE();
@@ -651,13 +651,13 @@ void CHECK_UNEXPECTED_DESCENT() {
 
 void CHECK_RELEASE_FAILURE() {
   
-  if ( Not_Released == false && Release_Failure == false && (millis() - Released_Time > Release_Failure_Delay) ) {
+  if ( Not_Released == false && Release_Failure == false && Emergency_Release == false && (millis() - Released_Time > Release_Failure_Delay) ) {
     if (Current_Altitude - Released_Altitude > Release_Failure_Altitude) {   
       Serial.println("\nFailure to release detected! Trying to release with both cutter and servo!");
       UPDATE_OLED("Release\nfailure\ndetected!");
       Release_Mode = "RELEASE FAILURE";
       Release_Failure = true;
-      Burn_Time = 2 * Burn_Time;
+      Burn_Time = Failure_Burn_Time_Multiplier * Burn_Time;
       RESISTOR_CUTTER_RELEASE();
       delay(100);
       SERVO_RELEASE();
@@ -702,7 +702,8 @@ void UPDATE_DATA() {
     UPDATE_SPEEDS();
     
     if (Header_Logged == false) {
-        Data = "Time(s), Lat(dg), Long(dg), Altitude GPS(ft), Temperature(F), Altitude Pressure(PSF), Pressure(PSF), Vertical Speed(ft/s), Horizontal Speed(mph), GPS Satellites, GPS Fix, Release Mode, Unexpected Descent Counter";
+        Data = "Release Altitude: " + String(Release_Altitude) +  " feet\nRelease Time: " + String(Release_Time) + " seconds\nBurn Time: " + String(Burn_Time) + " seconds\nAltitude Method: " + String(Altitude_Method) + "\n\n";
+        Data = Data + "Time(s), Lat(dg), Long(dg), Altitude GPS(ft), Altitude MS(PSF), Temperature(F), Pressure(PSF), Vertical Speed(ft/s), Horizontal Speed(mph), GPS Satellites, GPS Fix, Release Mode, Unexpected Descent Counter";
         Header_Logged = true;
     }
 
